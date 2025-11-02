@@ -1,2 +1,5 @@
+# Python virtual environment
+.venv/
+#####
 !requirements.txt
 bird_migration.csv
