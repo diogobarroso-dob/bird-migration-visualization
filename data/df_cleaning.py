@@ -144,10 +144,22 @@ print("\n" + "="*50 + "\n")
 # =============================================================================
 # FINALIZED DATASET
 # =============================================================================
+def save_cleaned_data(df_input, output_filename='cleaned_migration_data.csv', output_dir='data'):
+    """
+    Finalized the DataFrame (resets index) and saves it.
+    """
+    df_final = df_input.reset_index(drop=True)
+    
+    output_path = os.path.join(output_dir, output_filename)
+    
+    
+    df_final.to_csv(output_path, index=False)
+    
+    print(f"FINAL CLEANING REPORT: {len(df_final)} records saved.")
+    print(f"Saved cleaned data to: {output_path}")
+    
+    return df_final
 
-df_cleaned = df.copy() 
 
-print("FINAL CLEANING REPORT:")
-print(f"Total records remaining for visualization: {len(df_cleaned)}")
-print("Cleaned Data Head:")
-print(df_cleaned.head())
+df_cleaned_result = save_cleaned_data(df)
+
