@@ -5,7 +5,7 @@ import os
 # DATA LOADING AND INITIAL SUBSET
 # =============================================================================
 
-file_path = os.path.join('data', 'Bird_Migration_Data_with_Origin.csv')
+file_path = os.path.join(os.path.dirname(__file__), 'Bird_Migration_Data_with_Origin.csv')
 
 try:
     df_original = pd.read_csv(file_path, sep=',')
@@ -144,22 +144,17 @@ print("\n" + "="*50 + "\n")
 # =============================================================================
 # FINALIZED DATASET
 # =============================================================================
-def save_cleaned_data(df_input, output_filename='cleaned_migration_data.csv', output_dir='data'):
+def finalize_cleaned_data(df_input):
     """
-    Finalized the DataFrame (resets index) and saves it.
+    Finalize the DataFrame (resets index) and returns it.
     """
     df_final = df_input.reset_index(drop=True)
     
-    output_path = os.path.join(output_dir, output_filename)
-    
-    
-    df_final.to_csv(output_path, index=False)
-    
-    print(f"FINAL CLEANING REPORT: {len(df_final)} records saved.")
-    print(f"Saved cleaned data to: {output_path}")
+    print(f"FINAL CLEANING REPORT: {len(df_final)} records ready.")
     
     return df_final
 
 
-df_cleaned_result = save_cleaned_data(df)
+# Example usage
+df_cleaned_result = finalize_cleaned_data(df)
 
