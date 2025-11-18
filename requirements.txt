@@ -23,3 +23,8 @@ tzdata==2025.2
 urllib3==2.5.0
 xyzservices==2025.4.0
 zipp==3.23.0
+dash
+dash-bootstrap-components
+matplotlib
+seaborn
+numpy
