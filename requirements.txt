@@ -28,3 +28,5 @@ dash-bootstrap-components
 matplotlib
 seaborn
 numpy
+jupyter-dash
+global-land-mask
