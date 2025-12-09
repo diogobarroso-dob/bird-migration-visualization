@@ -8,6 +8,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.colors as pc
 
+BIRD_COLORS = ['#1F4068', '#DE8918', '#BF3200']
+
 # Ensure project path is correct (from your original code)
 sys.path.append(os.path.abspath(".."))
 
@@ -97,7 +99,7 @@ def create_map(df):
         hover_data={"Bird_name": True, "Latitude": False, "Longitude": False},
         projection="orthographic", 
         title=f"Tracking {df['bird_name'].nunique()} Unique Birds",
-        color_discrete_sequence=px.colors.qualitative.Bold,
+        color_discrete_sequence=BIRD_COLORS,
         fitbounds="locations"
     )
 
@@ -260,40 +262,100 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
 
     return fig
 
+
 # --- LINE CHART ENGINES (Unchanged from Main) ---
 def build_line_chart_altitude(df, selected_bird):
     if not selected_bird:
         fig = px.line()
         fig.update_layout(title="Select bird to begin", template='plotly_white')
         return fig
-
-    df_filtered = df[df['bird_name'].isin(selected_bird)]
     
-    fig = px.line(
-        df_filtered, x='date_time', y='altitude', color='bird_name',
+    if isinstance(selected_bird, str): selected_bird = [selected_bird]
+    
+    df_filtered = df[df["bird_name"].isin(selected_bird)].copy()
+    df_filtered = df_filtered.dropna(subset=["date_time", "latitude", "longitude"])
+    df_filtered = df_filtered.sort_values(["bird_name", "date_time"])
+    
+    df_filtered["frame"] = pd.to_datetime(df_filtered["date_time"].dt.strftime("%Y-%m-%d %H"))
+    df_filtered["frame_daily"] = pd.to_datetime(df_filtered["date_time"].dt.strftime("%Y-%m-%d"))
+
+    df_daily = (df_filtered.groupby(["bird_name", "frame_daily"]).first().reset_index())
+    df_daily["avg_altitude"] = (
+    df_daily
+    .groupby("bird_name")["altitude"]
+    .expanding()
+    .mean()
+    .reset_index(level=0, drop=True)   # removes group index so it fits back
+    )
+    
+    # Line Plot
+    line_plot = px.line(
+        df_daily, x='date_time', y='avg_altitude', color='bird_name',
+        color_discrete_sequence=BIRD_COLORS,
         title=f"Altitude Over Time",
-        labels={'date_time': 'Time', 'altitude': 'Altitude (meters)'},
+        labels={'date_time': 'Time', 'altitude': 'm'},
         template='plotly_white'
     )
-    fig.update_layout(margin=dict(t=60, b=40, l=40, r=40))
-    return fig
+
+    # Altitude Scatter Plot with Animation
+    scatter_plot = px.scatter(
+    df_daily, x='date_time', y='avg_altitude', color='bird_name',
+    color_discrete_sequence=BIRD_COLORS,
+    animation_frame="frame")
+
+    for trace in line_plot.data:
+        scatter_plot.add_trace(trace)
+    
+    scatter_plot.update_layout(margin=dict(t=60, b=40, l=40, r=40))
+    return scatter_plot
+
+# -- Speed Line Chart --
+# Data Preprocessing
 
 def build_line_chart_speed(df, selected_bird):
     if not selected_bird:
         fig = px.line()
         fig.update_layout(title="Select bird to begin", template='plotly_white')
         return fig
-
-    df_filtered = df[df['bird_name'].isin(selected_bird)]
     
-    fig = px.line(
-        df_filtered, x='date_time', y='speed_2d', color='bird_name',
+    if isinstance(selected_bird, str): selected_bird = [selected_bird]
+    
+    df_filtered = df[df["bird_name"].isin(selected_bird)].copy()
+    df_filtered = df_filtered.dropna(subset=["date_time", "latitude", "longitude"])
+    df_filtered = df_filtered.sort_values(["bird_name", "date_time"])
+    
+    df_filtered["frame"] = pd.to_datetime(df_filtered["date_time"].dt.strftime("%Y-%m-%d %H"))
+    df_filtered["frame_daily"] = pd.to_datetime(df_filtered["date_time"].dt.strftime("%Y-%m-%d"))
+
+    df_daily = (df_filtered.groupby(["bird_name", "frame_daily"]).first().reset_index())
+    df_daily["avg_speed"] = (
+    df_daily
+    .groupby("bird_name")["speed_2d"]
+    .expanding()
+    .mean()
+    .reset_index(level=0, drop=True)   # removes group index so it fits back
+    )
+    
+    # Line Plot
+    line_plot = px.line(
+        df_daily, x='date_time', y='avg_speed', color='bird_name',
+        color_discrete_sequence=BIRD_COLORS,
         title=f"Speed Over Time",
         labels={'date_time': 'Time', 'speed_2d': 'km/h'},
         template='plotly_white'
     )
-    fig.update_layout(margin=dict(t=60, b=40, l=40, r=40))
-    return fig
+
+    # 2D Speed Scatter Plot with Animation
+    scatter_plot = px.scatter(
+    df_daily, x='date_time', y='avg_speed', color='bird_name',
+    color_discrete_sequence=BIRD_COLORS,
+    animation_frame="frame")
+
+    for trace in line_plot.data:
+        scatter_plot.add_trace(trace)
+    
+    scatter_plot.update_layout(margin=dict(t=60, b=40, l=40, r=40))
+    return scatter_plot
 
 # --- ANIMATION ENGINE (Unchanged from Main) ---
 def build_animated_map(df, selected_bird):
@@ -319,12 +381,14 @@ def build_animated_map(df, selected_bird):
 
     fig = px.line_geo(
         df_path, lat="latitude", lon="longitude", color="bird_name",
+        color_discrete_sequence=BIRD_COLORS,
         line_group="bird_name", hover_name="bird_name",
         title=f"Animated Movement", height=650, fitbounds="locations"
     )
     
     fig_points = px.scatter_geo(
         df_daily, lat="latitude", lon="longitude", color="bird_name",
+        color_discrete_sequence=BIRD_COLORS,
         size=np.array([10]*len(df_daily)), animation_frame="frame",
         animation_group="bird_name", hover_name="bird_name"
     )
@@ -370,7 +434,7 @@ app.layout = dbc.Container([
 
                     html.Hr(),
                     
-                    # DATA CATEGORY (Updated with 'Rest')
+                   # DATA CATEGORY (Updated with 'Rest')
                     html.Label("Choose Data Category", className="fw-bold text-primary"),
                     dbc.RadioItems(
                         id='category-selector',
@@ -400,7 +464,7 @@ app.layout = dbc.Container([
                             switch=True, 
                             className="mb-3"
                         ),
-                    ], id='stats-container') 
+                    ], id='stats-container')  
                 ])
             ], className="mb-4 shadow-sm")
         ], width=12, md=3), 
@@ -422,27 +486,44 @@ app.layout = dbc.Container([
             ], className="shadow-sm border-0")
         ], width=12, md=9),
 
+    dbc.Row([
+        # Left: animated map (full height)
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
-                    dcc.Graph(id='line-chart-altitude', style={'height': '75vh'}) 
-                ], style={'padding': '0'})
-            ], className="shadow-sm border-0")
-        ], width=12, md=9),
+                    dcc.Graph(id="animated-map", style={"height": "75vh"},)
+                ],style={"padding": "0"},)
+            ],className="shadow-sm",
+            )
+            ],width=12,md=6,
+        ),
+
+        # Right: two line charts stacked
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
-                    dcc.Graph(id='line-chart-speed', style={'height': '75vh'}) 
-                ], style={'padding': '0'})
-            ], className="shadow-sm border-0")
-        ], width=12, md=9),
-        dbc.Col([
+                    dcc.Graph(id="line-chart-altitude",style={"height": "35vh"},)
+                ],style={"padding": "0"},)
+            ],className="shadow-sm border-0 mb-3",
+            ),
             dbc.Card([
                 dbc.CardBody([
-                    dcc.Graph(id='animated-map', style={'height': '75vh'}) 
-                ], style={'padding': '0'})
-            ], className="shadow-sm")
-        ], width=12, md=9)
+                    dcc.Graph(id="line-chart-speed",style={"height": "35vh"},)
+                ],style={"padding": "0"},)
+            ],className="shadow-sm border-0",
+            ),
+        ],width=12,md=6,
+        ),
+    ]),
+
+    # dbc.Row([
+    #     dbc.Col(
+    #         html.Div(
+    #             html.Button("Play", id="play-pause", n_clicks=0),
+    #             style={"textAlign": "center", "marginTop": "10px"},
+    #         ),width=12,),
+    # ],className="mb-4",)
+
     ]),
 ], fluid=True)
 
