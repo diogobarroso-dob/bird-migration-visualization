@@ -7,6 +7,10 @@ import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.colors as pc
+import plotly.io as pio
+
+# --- BUG FIX: Force default template globally to avoid 'None' issues ---
+pio.templates.default = "plotly_white"
 
 # ======================================================
 # CONSISTENT BIRD COLOR MAPPING
@@ -73,65 +77,52 @@ df_bird_stats = alt_stats.join(speed_stats).join(stop_counts.rename('Total_Rest'
 # 3. VISUALIZATION ENGINES
 # ======================================================
 
-# --- MAP ENGINE ---
+# --- MAP ENGINE (STATIC - ATLAS STYLE) ---
 def create_map(df):
+    fig = go.Figure()
+
     if df.empty:
-        fig = px.scatter_geo()
-        fig.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)")
         fig.add_annotation(text="No data selected", x=0.5, y=0.5, showarrow=False)
+        fig.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)")
         return fig
     
-    plot_data = []
-    for index, row in df.iterrows():
-        segment_id = f"{row['bird_name']}_{index}"
-        plot_data.append({
-            "Bird_name": row['bird_name'],
-            "Latitude": row['latitude'],
-            "Longitude": row['longitude'],
-            "Segment_ID": segment_id
-        })
-    
-    df_plot = pd.DataFrame(plot_data)
-
-    fig = px.line_geo(
-        df_plot,
-        lat="Latitude", lon="Longitude", color="Bird_name",
-        line_group="Bird_name", hover_name="Bird_name", 
-        hover_data={"Bird_name": True, "Latitude": False, "Longitude": False},
-        projection="orthographic",
-        # --- UPDATED TITLE ---
-        title="Trajectory Map",
-        color_discrete_map=BIRD_COLOR_MAP,
-        fitbounds="locations"
-    )
-
-    fig.update_traces(
-        mode='lines+markers', 
-        line=dict(width=2), 
-        marker=dict(size=6, symbol='circle', opacity=1, line=dict(width=0)),
-        opacity=0.8
-    )
+    # Manually add traces for each bird
+    unique_birds = df['bird_name'].unique()
+    for bird in unique_birds:
+        dff = df[df['bird_name'] == bird]
+        fig.add_trace(go.Scattergeo(
+            lat=dff['latitude'],
+            lon=dff['longitude'],
+            mode='lines+markers',
+            name=bird,
+            line=dict(width=2, color=BIRD_COLOR_MAP.get(bird, 'gray')),
+            marker=dict(size=6, opacity=0.8),
+            hoverinfo='text',
+            text=dff['bird_name']
+        ))
     
     fig.update_geos(
         visible=True, resolution=50,
-        showcountries=True, countrycolor="#bbbbbb",
-        showcoastlines=True, coastlinecolor="#bbbbbb",
-        showland=True, landcolor="#f0f0f0",      
-        showocean=True, oceancolor="#e4edff",   
-        projection_rotation=dict(lon=-10, lat=20)
+        showcountries=True, countrycolor="#A0A0A0",
+        showcoastlines=True, coastlinecolor="#888888",
+        
+        # --- ATLAS STYLE ---
+        showland=True, landcolor="#EAE7D6",      
+        showocean=True, oceancolor="#D4F1F9",    
+        showlakes=True, lakecolor="#D4F1F9",     
+        showrivers=True, rivercolor="#D4F1F9",   
+        
+        projection_rotation=dict(lon=-10, lat=20),
+        projection_type="orthographic",
+        fitbounds="locations"
     )
     
     fig.update_layout(
-        template="plotly_white",
-        # --- ADDED TITLE STYLING ---
-        title={
-            'x': 0.5,
-            'xanchor': 'center',
-            'font': {'size': 20}
-        },
+        title={'text': "Trajectory Map", 'x': 0.5, 'xanchor': 'center', 'font': {'size': 20}},
         margin={"r":0,"t":60,"l":0,"b":0},
         paper_bgcolor="rgba(0,0,0,0)", 
-        legend=dict(yanchor="top", y=0.95, xanchor="left", x=0.05, bgcolor="rgba(255,255,255,0.9)")
+        legend=dict(yanchor="top", y=0.95, xanchor="left", x=0.05, bgcolor="rgba(255,255,255,0.9)"),
+        template="plotly_white"
     )
     return fig
 
@@ -202,7 +193,6 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
 
     unique_birds = sorted(df_melted['bird_name'].unique())
     
-    # Convert Color to RGBA
     def convert_to_rgba(color_code, opacity):
         if color_code.startswith('#'):
             rgb = pc.hex_to_rgb(color_code)
@@ -213,16 +203,11 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
             return color_code
         return f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {opacity})"
     
-    # Determine opacity based on metric type
     def get_opacity(metric):
-        if 'Max' in metric:
-            return 1.0
-        elif 'Avg' in metric:
-            return 0.7
-        elif 'Min' in metric:
-            return 0.4
-        else:
-            return 1.0
+        if 'Max' in metric: return 1.0
+        elif 'Avg' in metric: return 0.7
+        elif 'Min' in metric: return 0.4
+        else: return 1.0
     
     fig = go.Figure()
     
@@ -231,10 +216,7 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
     
     for bird in unique_birds:
         bird_data = df_melted[df_melted['bird_name'] == bird].copy()
-        
-        bird_data['metric_order'] = bird_data['Metric'].map(
-            {m: i for i, m in enumerate(unique_metrics)}
-        )
+        bird_data['metric_order'] = bird_data['Metric'].map({m: i for i, m in enumerate(unique_metrics)})
         bird_data = bird_data.sort_values('metric_order')
         
         base_color = BIRD_COLOR_MAP.get(bird, '#808080')
@@ -244,53 +226,20 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
             x=bird_data['Metric'],
             y=bird_data['Value'],
             name=bird,
-            marker=dict(
-                color=colors,
-                line=dict(color='white', width=1)
-            ),
+            marker=dict(color=colors, line=dict(color='white', width=1)),
             text=bird_data['Value'].round(0).astype(int),
             texttemplate='%{text:,}',
             textposition='outside',
-            hovertemplate=(
-                f'<b>{bird}</b><br>' +
-                'Metric: %{x}<br>' +
-                'Value: %{y:,.0f}<br>' +
-                '<extra></extra>'
-            )
+            hovertemplate=(f'<b>{bird}</b><br>Metric: %{{x}}<br>Value: %{{y:,.0f}}<br><extra></extra>')
         ))
 
     fig.update_layout(
-        title={
-            'text': title_prefix,
-            'x': 0.5,
-            'xanchor': 'center',
-            'font': {'size': 20}
-        },
+        title={'text': title_prefix, 'x': 0.5, 'xanchor': 'center', 'font': {'size': 20}},
         template='plotly_white',
-        legend=dict(
-            title="Birds",
-            orientation="v",
-            yanchor="top",
-            y=0.98,
-            xanchor="left",
-            x=1.02,
-            bgcolor='rgba(255,255,255,0.9)',
-            bordercolor='#e0e0e0',
-            borderwidth=1
-        ),
+        legend=dict(title="Birds", orientation="v", yanchor="top", y=0.98, xanchor="left", x=1.02, bgcolor='rgba(255,255,255,0.9)', bordercolor='#e0e0e0', borderwidth=1),
         margin=dict(t=60, b=60, l=60, r=200),
-        yaxis=dict(
-            title=y_label,
-            tickformat=",",
-            gridcolor='#e0e0e0',
-            showgrid=True,
-            zeroline=True
-        ),
-        xaxis=dict(
-            title="Statistics",
-            tickangle=-45 if len(unique_metrics) > 3 else 0,
-            showgrid=False
-        ),
+        yaxis=dict(title=y_label, tickformat=",", gridcolor='#e0e0e0', showgrid=True, zeroline=True),
+        xaxis=dict(title="Statistics", tickangle=-45 if len(unique_metrics) > 3 else 0, showgrid=False),
         barmode='group',
         bargap=0.5,      
         bargroupgap=0.1,
@@ -300,21 +249,14 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
     )
     
     if category == "Speed":
-        fig.add_annotation(
-            text="Note: Speed statistics calculated from flying segments only (speed ≥ 0.5 km/h)",
-            xref="paper", yref="paper",
-            x=0.5, y=-0.15,
-            showarrow=False,
-            font=dict(size=10, color="#7f8c8d"),
-            xanchor='center'
-        )
+        fig.add_annotation(text="Note: Speed statistics calculated from flying segments only (speed ≥ 0.5 km/h)", xref="paper", yref="paper", x=0.5, y=-0.15, showarrow=False, font=dict(size=10, color="#7f8c8d"), xanchor='center')
 
     return fig
 
 # --- ALTITUDE LINE CHART ---
 def build_line_chart_altitude(df, selected_bird):
     if not selected_bird:
-        fig = px.line()
+        fig = go.Figure()
         fig.update_layout(title="Select bird to begin", template='plotly_white')
         return fig
     
@@ -328,25 +270,21 @@ def build_line_chart_altitude(df, selected_bird):
     df_filtered["frame_daily"] = pd.to_datetime(df_filtered["date_time"].dt.strftime("%Y-%m-%d"))
 
     df_daily = (df_filtered.groupby(["bird_name", "frame_daily"]).first().reset_index())
-    df_daily["avg_altitude"] = (
-        df_daily
-        .groupby("bird_name")["altitude"]
-        .expanding()
-        .mean()
-        .reset_index(level=0, drop=True)
-    )
+    df_daily["avg_altitude"] = (df_daily.groupby("bird_name")["altitude"].expanding().mean().reset_index(level=0, drop=True))
     
+    # --- SAFE PX CALL: Use empty dict for template ---
     line_plot = px.line(
         df_daily, x='date_time', y='avg_altitude', color='bird_name',
         color_discrete_map=BIRD_COLOR_MAP,
         labels={'date_time': 'Date', 'avg_altitude': 'Altitude (m)'},
-        template='plotly_white'
+        template={} 
     )
 
     scatter_plot = px.scatter(
         df_daily, x='date_time', y='avg_altitude', color='bird_name',
         color_discrete_map=BIRD_COLOR_MAP,
-        animation_frame="frame"
+        animation_frame="frame",
+        template={} 
     )
 
     for trace in line_plot.data:
@@ -354,76 +292,31 @@ def build_line_chart_altitude(df, selected_bird):
     
     scatter_plot.update_layout(
         uirevision=str(selected_bird), 
-        
-        title={
-            'text': "Altitude Over Time",
-            'x': 0.05,
-            'xanchor': 'left'
-        },
+        title={'text': "Altitude Over Time", 'x': 0.05, 'xanchor': 'left'},
+        template='plotly_white',
         margin=dict(t=60, b=50, l=40, r=40), 
-        xaxis=dict(
-            title="",
-            showticklabels=False, 
-            visible=True
-        ),
+        xaxis=dict(title="", showticklabels=False, visible=True),
         yaxis=dict(title="Altitude (m)"),
         updatemenus=[{
             'type': 'buttons',
             'showactive': False,
-            'x': 0,
-            'y': -0.15, 
-            'xanchor': 'left',
-            'yanchor': 'top',
-            'buttons': [{
-                'label': 'Play',
-                'method': 'animate',
-                'args': [None, {
-                    'frame': {'duration': 100, 'redraw': True},
-                    'fromcurrent': True,
-                    'transition': {'duration': 50}
-                }]
-            }, {
-                'label': 'Pause',
-                'method': 'animate',
-                'args': [[None], {
-                    'frame': {'duration': 0, 'redraw': False},
-                    'mode': 'immediate',
-                    'transition': {'duration': 0}
-                }]
-            }]
+            'x': 0, 'y': -0.15, 'xanchor': 'left', 'yanchor': 'top',
+            'buttons': [{'label': 'Play', 'method': 'animate', 'args': [None, {'frame': {'duration': 100, 'redraw': True}, 'fromcurrent': True, 'transition': {'duration': 50}}]},
+                        {'label': 'Pause', 'method': 'animate', 'args': [[None], {'frame': {'duration': 0, 'redraw': False}, 'mode': 'immediate', 'transition': {'duration': 0}}]}]
         }],
         sliders=[{
-            'active': 0,
-            'yanchor': 'top',
-            'y': -0.1, 
-            'xanchor': 'left',
-            'currentvalue': {
-                'prefix': '',
-                'visible': False,
-                'xanchor': 'right'
-            },
-            'transition': {'duration': 50},
-            'pad': {'b': 5, 't': 5},
-            'len': 0.9,
-            'x': 0.05,
-            'steps': [{
-                'args': [[f['name']], {
-                    'frame': {'duration': 0, 'redraw': True},
-                    'mode': 'immediate',
-                    'transition': {'duration': 0}
-                }],
-                'method': 'animate',
-                'label': pd.to_datetime(f['name']).strftime('%b %Y')  
-            } for f in scatter_plot.frames]
+            'active': 0, 'yanchor': 'top', 'y': -0.1, 'xanchor': 'left',
+            'currentvalue': {'prefix': '', 'visible': False, 'xanchor': 'right'},
+            'transition': {'duration': 50}, 'pad': {'b': 5, 't': 5}, 'len': 0.9, 'x': 0.05,
+            'steps': [{'args': [[f['name']], {'frame': {'duration': 0, 'redraw': True}, 'mode': 'immediate', 'transition': {'duration': 0}}], 'method': 'animate', 'label': pd.to_datetime(f['name']).strftime('%b %Y')} for f in scatter_plot.frames]
         }]
     )
-    
     return scatter_plot
 
 # --- SPEED LINE CHART ---
 def build_line_chart_speed(df, selected_bird):
     if not selected_bird:
-        fig = px.line()
+        fig = go.Figure()
         fig.update_layout(title="Select bird to begin", template='plotly_white')
         return fig
     
@@ -437,25 +330,21 @@ def build_line_chart_speed(df, selected_bird):
     df_filtered["frame_daily"] = pd.to_datetime(df_filtered["date_time"].dt.strftime("%Y-%m-%d"))
 
     df_daily = (df_filtered.groupby(["bird_name", "frame_daily"]).first().reset_index())
-    df_daily["avg_speed"] = (
-        df_daily
-        .groupby("bird_name")["speed_2d"]
-        .expanding()
-        .mean()
-        .reset_index(level=0, drop=True)
-    )
+    df_daily["avg_speed"] = (df_daily.groupby("bird_name")["speed_2d"].expanding().mean().reset_index(level=0, drop=True))
     
+    # --- SAFE PX CALL ---
     line_plot = px.line(
         df_daily, x='date_time', y='avg_speed', color='bird_name',
         color_discrete_map=BIRD_COLOR_MAP,
         labels={'date_time': 'Date', 'avg_speed': 'Speed (km/h)'},
-        template='plotly_white'
+        template={}
     )
 
     scatter_plot = px.scatter(
         df_daily, x='date_time', y='avg_speed', color='bird_name',
         color_discrete_map=BIRD_COLOR_MAP,
-        animation_frame="frame"
+        animation_frame="frame",
+        template={}
     )
 
     for trace in line_plot.data:
@@ -463,70 +352,23 @@ def build_line_chart_speed(df, selected_bird):
     
     scatter_plot.update_layout(
         uirevision=str(selected_bird),
-
-        title={
-            'text': "Speed Over Time",
-            'x': 0.05,
-            'xanchor': 'left'
-        },
+        title={'text': "Speed Over Time", 'x': 0.05, 'xanchor': 'left'},
+        template='plotly_white',
         margin=dict(t=60, b=50, l=40, r=40),
-        xaxis=dict(
-            title="",
-            showticklabels=False, 
-            visible=True
-        ),
+        xaxis=dict(title="", showticklabels=False, visible=True),
         yaxis=dict(title="Speed (km/h)"),
         updatemenus=[{
-            'type': 'buttons',
-            'showactive': False,
-            'x': 0,
-            'y': -0.15,
-            'xanchor': 'left',
-            'yanchor': 'top',
-            'buttons': [{
-                'label': 'Play',
-                'method': 'animate',
-                'args': [None, {
-                    'frame': {'duration': 100, 'redraw': True},
-                    'fromcurrent': True,
-                    'transition': {'duration': 50}
-                }]
-            }, {
-                'label': 'Pause',
-                'method': 'animate',
-                'args': [[None], {
-                    'frame': {'duration': 0, 'redraw': False},
-                    'mode': 'immediate',
-                    'transition': {'duration': 0}
-                }]
-            }]
+            'type': 'buttons', 'showactive': False, 'x': 0, 'y': -0.15, 'xanchor': 'left', 'yanchor': 'top',
+            'buttons': [{'label': 'Play', 'method': 'animate', 'args': [None, {'frame': {'duration': 100, 'redraw': True}, 'fromcurrent': True, 'transition': {'duration': 50}}]},
+                        {'label': 'Pause', 'method': 'animate', 'args': [[None], {'frame': {'duration': 0, 'redraw': False}, 'mode': 'immediate', 'transition': {'duration': 0}}]}]
         }],
         sliders=[{
-            'active': 0,
-            'yanchor': 'top',
-            'y': -0.1, 
-            'xanchor': 'left',
-            'currentvalue': {
-                'prefix': '',
-                'visible': False,
-                'xanchor': 'right'
-            },
-            'transition': {'duration': 50},
-            'pad': {'b': 5, 't': 5},
-            'len': 0.9,
-            'x': 0.05,
-            'steps': [{
-                'args': [[f['name']], {
-                    'frame': {'duration': 0, 'redraw': True},
-                    'mode': 'immediate',
-                    'transition': {'duration': 0}
-                }],
-                'method': 'animate',
-                'label': pd.to_datetime(f['name']).strftime('%b %Y')  
-            } for f in scatter_plot.frames]
+            'active': 0, 'yanchor': 'top', 'y': -0.1, 'xanchor': 'left',
+            'currentvalue': {'prefix': '', 'visible': False, 'xanchor': 'right'},
+            'transition': {'duration': 50}, 'pad': {'b': 5, 't': 5}, 'len': 0.9, 'x': 0.05,
+            'steps': [{'args': [[f['name']], {'frame': {'duration': 0, 'redraw': True}, 'mode': 'immediate', 'transition': {'duration': 0}}], 'method': 'animate', 'label': pd.to_datetime(f['name']).strftime('%b %Y')} for f in scatter_plot.frames]
         }]
     )
-    
     return scatter_plot
 
 # --- ANIMATED MAP ---
@@ -551,18 +393,22 @@ def build_animated_map(df, selected_bird):
     df_path = df_hourly[df_hourly["step"].notna()].copy()
     df_path = df_path[df_path["step"].apply(lambda s: df_path["step"] <= s).any(axis=0)]
 
+    # --- SAFE PX CALL ---
     fig = px.line_geo(
         df_path, lat="latitude", lon="longitude", color="bird_name",
         color_discrete_map=BIRD_COLOR_MAP,
         line_group="bird_name", hover_name="bird_name",
-        title=f"Animated Movement", height=650
+        title=f"Animated Movement", height=650,
+        template={} 
     )
     
+    # --- SAFE PX CALL ---
     fig_points = px.scatter_geo(
         df_daily, lat="latitude", lon="longitude", color="bird_name",
         color_discrete_map=BIRD_COLOR_MAP,
         size=np.array([10]*len(df_daily)), animation_frame="frame",
-        animation_group="bird_name", hover_name="bird_name"
+        animation_group="bird_name", hover_name="bird_name",
+        template={} 
     )
 
     for trace in fig.data:
@@ -570,74 +416,35 @@ def build_animated_map(df, selected_bird):
 
     fig_points.update_layout(
         geo=dict(
-            fitbounds="locations",  
-            showcountries=True, 
-            showland=True, 
-            landcolor="rgba(240,240,240,1)", 
-            showocean=True, oceancolor="#e4edff", 
+            fitbounds="locations", 
+            showcountries=True, countrycolor="#A0A0A0",
+            showcoastlines=True, coastlinecolor="#888888",
+            
+            # --- ATLAS STYLE APPLIED HERE TOO ---
+            showland=True, landcolor="#EAE7D6",
+            showocean=True, oceancolor="#D4F1F9",
+            showlakes=True, lakecolor="#D4F1F9",
+            showrivers=True, rivercolor="#D4F1F9",
+            
             projection_type="natural earth"
         ),
         uirevision=str(selected_bird),
-        
-        title={
-            'text': "Animated Movement",
-            'x': 0.05,
-            'xanchor': 'left'
-        },
+        title={'text': "Animated Movement", 'x': 0.05, 'xanchor': 'left'},
         margin={"r":0,"t":50,"l":0,"b":80}, 
         paper_bgcolor="rgba(0,0,0,0)", 
         template="plotly_white",
         updatemenus=[{
-            'type': 'buttons',
-            'showactive': False,
-            'x': 0,
-            'y': 0,  
-            'xanchor': 'left',
-            'yanchor': 'bottom',
-            'buttons': [{
-                'label': 'Play',
-                'method': 'animate',
-                'args': [None, {
-                    'frame': {'duration': 150, 'redraw': True},
-                    'fromcurrent': True,
-                    'transition': {'duration': 75}
-                }]
-            }, {
-                'label': 'Pause',
-                'method': 'animate',
-                'args': [[None], {
-                    'frame': {'duration': 0, 'redraw': False},
-                    'mode': 'immediate',
-                    'transition': {'duration': 0}
-                }]
-            }]
+            'type': 'buttons', 'showactive': False, 'x': 0, 'y': 0, 'xanchor': 'left', 'yanchor': 'bottom',
+            'buttons': [{'label': 'Play', 'method': 'animate', 'args': [None, {'frame': {'duration': 150, 'redraw': True}, 'fromcurrent': True, 'transition': {'duration': 75}}]},
+                        {'label': 'Pause', 'method': 'animate', 'args': [[None], {'frame': {'duration': 0, 'redraw': False}, 'mode': 'immediate', 'transition': {'duration': 0}}]}]
         }],
         sliders=[{
-            'active': 0,
-            'yanchor': 'bottom',
-            'y': 0.1,  
-            'xanchor': 'left',
-            'currentvalue': {
-                'prefix': '',
-                'visible': False, 
-                'xanchor': 'right'
-            },
-            'transition': {'duration': 75},
-            'pad': {'b': 5, 't': 5},
-            'len': 0.9,
-            'x': 0.05,
-            'steps': [{
-                'args': [[f['name']], {
-                    'frame': {'duration': 0, 'redraw': True},
-                    'mode': 'immediate',
-                    'transition': {'duration': 0}
-                }],
-                'method': 'animate',
-                'label': pd.to_datetime(f['name']).strftime('%b %Y')  
-            } for f in fig_points.frames]
+            'active': 0, 'yanchor': 'bottom', 'y': 0.1, 'xanchor': 'left',
+            'currentvalue': {'prefix': '', 'visible': False, 'xanchor': 'right'},
+            'transition': {'duration': 75}, 'pad': {'b': 5, 't': 5}, 'len': 0.9, 'x': 0.05,
+            'steps': [{'args': [[f['name']], {'frame': {'duration': 0, 'redraw': True}, 'mode': 'immediate', 'transition': {'duration': 0}}], 'method': 'animate', 'label': pd.to_datetime(f['name']).strftime('%b %Y')} for f in fig_points.frames]
         }]
     )
-    
     return fig_points
 
 # ======================================================
@@ -648,75 +455,47 @@ app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
 app.layout = dbc.Container([
-    # --- HEADER ROW ---
+    
+    # --- 1. HERO BANNER SECTION ---
     dbc.Row([
-        dbc.Col(html.H2("Global Bird Migration Tracker", className="display-6"), width=12),
-        dbc.Col(html.P("Compare statistics between specific bird IDs.", className="text-muted"), width=12),
-    ], className="my-4"),
+        dbc.Col([
+            html.Div([
+                html.Img(
+                    src=app.get_asset_url('seagull_3.gif'), 
+                    style={'width': '100%', 'height': '300px', 'objectFit': 'cover', 'filter': 'blur(4px)', 'position': 'absolute', 'top': '0', 'left': '0', 'zIndex': '1'}
+                ),
+                html.Div(style={'position': 'absolute', 'top': '0', 'left': '0', 'width': '100%', 'height': '300px', 'backgroundColor': 'rgba(0, 0, 0, 0.4)', 'zIndex': '2'}),
+                html.Div([
+                    html.H1("Journeys In The Sky", className="display-3 fw-bold text-white"),
+                    html.P("Global Bird Migration Tracker", className="lead text-light"),
+                    html.P("Compare patterns, altitudes, and speeds across 3 seagulls - Eric, Nico and Sanne.", className="text-white-50")
+                ], style={'position': 'relative', 'zIndex': '3', 'paddingTop': '80px', 'textAlign': 'center'})
+            ], style={'position': 'relative', 'height': '300px', 'overflow': 'hidden', 'borderRadius': '0 0 15px 15px'})
+        ], width=12)
+    ], className="mb-4"),
     
     # --- MAIN CONTENT ROW ---
     dbc.Row([
         # ---------------------
-        # LEFT COLUMN (SIDEBAR)
+        # LEFT COLUMN (SIDEBAR - BIRDS ONLY)
         # ---------------------
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader("Filter Controls", className="fw-bold"),
+                dbc.CardHeader("Global Filter", className="fw-bold"),
                 dbc.CardBody([
-                    # BIRD SELECTOR
-                    html.Label("Select Bird", className="mb-2 fw-bold text-primary"),
-                    dcc.Dropdown(
+                    html.Label("Select Birds", className="mb-2 fw-bold text-primary"),
+                    dbc.Checklist(
                         id='bird-name-filter',
                         options=[{'label': s, 'value': s} for s in sorted(df['bird_name'].unique())],
                         value=sorted(df['bird_name'].unique()), 
-                        multi=True, 
-                        clearable=True
+                        switch=True, 
+                        className="mb-3"
                     ),
                     dbc.Button("Select All Birds", id="btn-all-birds", color="light", size="sm", className="mt-1 w-100 border"),
-
-                    html.Hr(),
-                    
-                   # DATA CATEGORY
-                    html.Label("Choose Data Category", className="fw-bold text-primary"),
-                    dbc.RadioItems(
-                        id='category-selector',
-                        options=[
-                            {'label': ' Altitude', 'value': 'Altitude'},
-                            {'label': ' Speed', 'value': 'Speed'},
-                            {'label': ' Rest Stops', 'value': 'Rest'}
-                        ],
-                        value='Altitude', 
-                        className="mb-3",
-                        inputClassName="me-2"
-                    ),
-
-                    html.Hr(),
-
-                    # STATISTIC CHECKLIST
-                    html.Div([
-                        html.Label("Select Statistics", className="fw-bold text-primary"),
-                        dbc.Checklist(
-                            id='statistic-checklist',
-                            options=[
-                                {'label': ' Maximum', 'value': 'Max'},
-                                {'label': ' Average', 'value': 'Avg'},
-                                {'label': ' Minimum', 'value': 'Min'},
-                            ],
-                            value=['Max', 'Avg', 'Min'], 
-                            switch=True, 
-                            className="mb-3"
-                        ),
-                    ], id='stats-container')  
                 ])
             ], 
             className="mb-4 shadow-sm",
-            # --- STICKY SIDEBAR STYLE ---
-            style={
-                "position": "sticky",
-                "top": "20px",
-                "zIndex": "1000",
-                "height": "fit-content"
-            })
+            style={"position": "sticky", "top": "20px", "zIndex": "1000", "height": "fit-content"})
         ], width=12, md=3), 
         
         # ----------------------
@@ -727,157 +506,106 @@ app.layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
-                        dbc.CardBody([
-                            dcc.Graph(id='migration-map', style={'height': '75vh'}, config={'responsive': True}) 
-                        ], style={'padding': '0'})
+                        dbc.CardBody([dcc.Graph(id='migration-map', style={'height': '75vh'}, config={'responsive': True})], style={'padding': '0'})
                     ], className="shadow-sm mb-5") 
                 ], width=12)
             ]),
             
-            # --- FORCE SPACER (50px) ---
             html.Div(style={"height": "50px"}),
 
-            # ROW 2: BAR CHART
+            # ROW 2: BAR CHART (SPLIT COLUMN)
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
-                        dbc.CardBody([
-                            dcc.Graph(id='main-bar-chart', style={'height': '75vh'}, config={'responsive': True}) 
-                        ], style={'padding': '0'})
+                        dbc.CardBody([dcc.Graph(id='main-bar-chart', style={'height': '75vh'}, config={'responsive': True})], style={'padding': '0'})
                     ], className="shadow-sm border-0 mb-5")
-                ], width=12)
+                ], width=12, md=9),
+
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader("Chart Controls", className="fw-bold"),
+                        dbc.CardBody([
+                            html.Label("Choose Data Category", className="fw-bold text-primary"),
+                            dbc.RadioItems(
+                                id='category-selector',
+                                options=[{'label': ' Altitude', 'value': 'Altitude'}, {'label': ' Speed', 'value': 'Speed'}, {'label': ' Rest Stops', 'value': 'Rest'}],
+                                value='Altitude', className="mb-3", inputClassName="me-2"
+                            ),
+                            html.Hr(),
+                            html.Div([
+                                html.Label("Select Statistics", className="fw-bold text-primary"),
+                                dbc.Checklist(
+                                    id='statistic-checklist',
+                                    options=[{'label': ' Maximum', 'value': 'Max'}, {'label': ' Average', 'value': 'Avg'}, {'label': ' Minimum', 'value': 'Min'}],
+                                    value=['Max', 'Avg', 'Min'], switch=True, className="mb-3"
+                                ),
+                            ], id='stats-container') 
+                        ])
+                    ], className="shadow-sm sticky-top", style={"top": "20px"})
+                ], width=12, md=3)
             ]),
 
-            # --- FORCE SPACER (INCREASED to 200px) ---
             html.Div(style={"height": "200px"}),
 
             # ROW 3: ANIMATED MAP + LINE CHARTS
             dbc.Row([
-                # Animated Map (Left Half)
                 dbc.Col([
                     dbc.Card([
-                        dbc.CardBody([
-                            dcc.Graph(id="animated-map", style={"height": "75vh"}, config={'responsive': True})
-                        ], style={"padding": "0"})
+                        dbc.CardBody([dcc.Graph(id="animated-map", style={"height": "75vh"}, config={'responsive': True})], style={"padding": "0"})
                     ], className="shadow-sm")
                 ], width=12, md=6),
 
-                # Line Charts (Right Half)
                 dbc.Col([
                     dbc.Card([
-                        dbc.CardBody([
-                            dcc.Graph(id="line-chart-altitude", style={"height": "35vh"}, config={'responsive': True})
-                        ], style={"padding": "0"})
+                        dbc.CardBody([dcc.Graph(id="line-chart-altitude", style={"height": "35vh"}, config={'responsive': True})], style={"padding": "0"})
                     ], className="shadow-sm border-0 mb-4"), 
                     
                     dbc.Card([
-                        dbc.CardBody([
-                            dcc.Graph(id="line-chart-speed", style={"height": "35vh"}, config={'responsive': True})
-                        ], style={"padding": "0"})
+                        dbc.CardBody([dcc.Graph(id="line-chart-speed", style={"height": "35vh"}, config={'responsive': True})], style={"padding": "0"})
                     ], className="shadow-sm border-0")
                 ], width=12, md=6),
             ])
-        ], width=12, md=9), # End Right Column
-
-    ]), # End Main Content Row
+        ], width=12, md=9), 
+    ]), 
 ], fluid=True)
 
 # ======================================================
 # 5. CALLBACKS
 # ======================================================
 
-# --- MAP UPDATE ---
-@app.callback(
-    Output('migration-map', 'figure'),
-    Input('bird-name-filter', 'value')
-)
+@app.callback(Output('migration-map', 'figure'), Input('bird-name-filter', 'value'))
 def update_map(selected_bird_names):
-    if not selected_bird_names:
-        return create_map(pd.DataFrame())
+    if not selected_bird_names: return create_map(pd.DataFrame())
     filtered = df[df['bird_name'].isin(selected_bird_names)]
     return create_map(filtered)
 
-# --- OPTIONS & VISIBILITY UPDATE ---
-@app.callback(
-    [Output('statistic-checklist', 'options'),
-     Output('statistic-checklist', 'value'),
-     Output('stats-container', 'style')], 
-    Input('category-selector', 'value'),
-    State('statistic-checklist', 'value')
-)
+@app.callback([Output('statistic-checklist', 'options'), Output('statistic-checklist', 'value'), Output('stats-container', 'style')], Input('category-selector', 'value'), State('statistic-checklist', 'value'))
 def update_stat_options(category, current_values):
-    if category == 'Rest':
-        options = [{'label': ' Total Count', 'value': 'Total'}]
-        return options, ['Total'], {'display': 'none'}
-
+    if category == 'Rest': return [{'label': ' Total Count', 'value': 'Total'}], ['Total'], {'display': 'none'}
     elif category == 'Speed':
-        options = [
-            {'label': ' Maximum Speed', 'value': 'Max'},
-            {'label': ' Average Speed', 'value': 'Avg'},
-        ]
-        if not current_values or 'Total' in current_values:
-             return options, ['Max', 'Avg'], {'display': 'block'}
         valid_values = [v for v in current_values if v in ['Max', 'Avg']]
-        return options, (valid_values if valid_values else ['Max', 'Avg']), {'display': 'block'}
-
+        return [{'label': ' Maximum Speed', 'value': 'Max'}, {'label': ' Average Speed', 'value': 'Avg'}], valid_values if valid_values else ['Max', 'Avg'], {'display': 'block'}
     else: 
-        options = [
-            {'label': ' Maximum', 'value': 'Max'},
-            {'label': ' Average', 'value': 'Avg'},
-            {'label': ' Minimum', 'value': 'Min'}
-        ]
-        if not current_values or 'Total' in current_values:
-             return options, ['Max', 'Avg', 'Min'], {'display': 'block'}
         valid_values = [v for v in current_values if v in ['Max', 'Avg', 'Min']]
-        return options, (valid_values if valid_values else ['Max', 'Avg', 'Min']), {'display': 'block'}
+        return [{'label': ' Maximum', 'value': 'Max'}, {'label': ' Average', 'value': 'Avg'}, {'label': ' Minimum', 'value': 'Min'}], valid_values if valid_values else ['Max', 'Avg', 'Min'], {'display': 'block'}
 
-# --- BAR CHART UPDATE ---
-@app.callback(
-    Output('main-bar-chart', 'figure'),
-    [
-        Input('bird-name-filter', 'value'),
-        Input('category-selector', 'value'),
-        Input('statistic-checklist', 'value')
-    ]
-)
+@app.callback(Output('main-bar-chart', 'figure'), [Input('bird-name-filter', 'value'), Input('category-selector', 'value'), Input('statistic-checklist', 'value')])
 def update_chart(selected_bird, category, selected_stats):
-    return build_bar_chart(
-        df_bird_stats=df_bird_stats,
-        selected_bird=selected_bird,
-        category=category,
-        selected_stats=selected_stats
-    )
+    return build_bar_chart(df_bird_stats, selected_bird, category, selected_stats)
 
-# --- LINE CHART UPDATES ---
-@app.callback(
-    Output('line-chart-altitude', 'figure'),
-    Input('bird-name-filter', 'value')
-)
+@app.callback(Output('line-chart-altitude', 'figure'), Input('bird-name-filter', 'value'))
 def update_line_chart_altitude(selected_bird):
     return build_line_chart_altitude(df=df, selected_bird=selected_bird)
 
-@app.callback(
-    Output('line-chart-speed', 'figure'),
-    Input('bird-name-filter', 'value')
-)
+@app.callback(Output('line-chart-speed', 'figure'), Input('bird-name-filter', 'value'))
 def update_line_chart_speed(selected_bird):
     return build_line_chart_speed(df=df, selected_bird=selected_bird)
 
-# --- ANIMATION UPDATE ---
-@app.callback(
-    Output('animated-map', 'figure'),
-    Input('bird-name-filter', 'value')
-)
+@app.callback(Output('animated-map', 'figure'), Input('bird-name-filter', 'value'))
 def update_animated_map(selected_bird):
     return build_animated_map(df=df, selected_bird=selected_bird)
 
-# --- SELECT ALL BUTTON ---
-@app.callback(
-    Output('bird-name-filter', 'value'),
-    Input('btn-all-birds', 'n_clicks'),
-    State('bird-name-filter', 'options'),
-    prevent_initial_call=True
-)
+@app.callback(Output('bird-name-filter', 'value'), Input('btn-all-birds', 'n_clicks'), State('bird-name-filter', 'options'), prevent_initial_call=True)
 def select_all_species(n_clicks, options):
     return [opt['value'] for opt in options]
 
