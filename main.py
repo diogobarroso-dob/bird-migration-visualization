@@ -136,7 +136,7 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
             xaxis={'visible': False}, yaxis={'visible': False},
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
             font=dict(size=18, color="#6c757d"),
-            height=800
+            height=500 # --- ADJUSTED HEIGHT (Not too big, not too small) ---
         )
         return fig
 
@@ -147,7 +147,7 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
             xaxis={'visible': False}, yaxis={'visible': False},
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
             font=dict(size=18, color="#6c757d"),
-            height=800
+            height=500 
         )
         return fig
 
@@ -176,7 +176,7 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
     
     if not valid_cols:
          fig = go.Figure()
-         fig.update_layout(title="No data available for the selected options.", height=800)
+         fig.update_layout(title="No data available for the selected options.", height=500)
          return fig
 
     df_melted = df_filtered.melt(
@@ -188,7 +188,7 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
 
     if df_melted.empty:
         fig = go.Figure()
-        fig.update_layout(title="No data available for the selected options.", height=800)
+        fig.update_layout(title="No data available for the selected options.", height=500)
         return fig
 
     unique_birds = sorted(df_melted['bird_name'].unique())
@@ -243,7 +243,7 @@ def build_bar_chart(df_bird_stats, selected_bird, category, selected_stats):
         barmode='group',
         bargap=0.5,      
         bargroupgap=0.1,
-        height=800,
+        height=500, # --- ADJUSTED HEIGHT (Not too big, not too small) ---
         hovermode='closest',
         plot_bgcolor='#fafafa',
     )
@@ -518,7 +518,8 @@ app.layout = dbc.Container([
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
-                        dbc.CardBody([dcc.Graph(id='main-bar-chart', style={'height': '75vh'}, config={'responsive': True})], style={'padding': '0'})
+                        # --- REDUCED HEIGHT HERE ---
+                        dbc.CardBody([dcc.Graph(id='main-bar-chart', style={'height': '50vh'}, config={'responsive': True})], style={'padding': '0'})
                     ], className="shadow-sm border-0 mb-5")
                 ], width=12, md=9),
 
