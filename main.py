@@ -456,23 +456,23 @@ server = app.server
 
 app.layout = dbc.Container([
     
-    # --- 1. HERO BANNER SECTION ---
+    # --- 1. HERO BANNER SECTION (STICKY) ---
     dbc.Row([
         dbc.Col([
             html.Div([
                 html.Img(
                     src=app.get_asset_url('seagull_3.gif'), 
-                    style={'width': '100%', 'height': '300px', 'objectFit': 'cover', 'filter': 'blur(4px)', 'position': 'absolute', 'top': '0', 'left': '0', 'zIndex': '1'}
+                    style={'width': '100%', 'height': '200px', 'objectFit': 'cover', 'filter': 'blur(4px)', 'position': 'absolute', 'top': '0', 'left': '0', 'zIndex': '1'}
                 ),
-                html.Div(style={'position': 'absolute', 'top': '0', 'left': '0', 'width': '100%', 'height': '300px', 'backgroundColor': 'rgba(0, 0, 0, 0.4)', 'zIndex': '2'}),
+                html.Div(style={'position': 'absolute', 'top': '0', 'left': '0', 'width': '100%', 'height': '200px', 'backgroundColor': 'rgba(0, 0, 0, 0.4)', 'zIndex': '2'}),
                 html.Div([
                     html.H1("Journeys In The Sky", className="display-3 fw-bold text-white"),
                     html.P("Global Bird Migration Tracker", className="lead text-light"),
                     html.P("Compare patterns, altitudes, and speeds across 3 seagulls - Eric, Nico and Sanne.", className="text-white-50")
-                ], style={'position': 'relative', 'zIndex': '3', 'paddingTop': '80px', 'textAlign': 'center'})
-            ], style={'position': 'relative', 'height': '300px', 'overflow': 'hidden', 'borderRadius': '0 0 15px 15px'})
+                ], style={'position': 'relative', 'zIndex': '3', 'paddingTop': '30px', 'textAlign': 'center'})
+            ], style={'position': 'relative', 'height': '200px', 'overflow': 'hidden', 'borderRadius': '0 0 15px 15px'})
         ], width=12)
-    ], className="mb-4"),
+    ], className="mb-4", style={"position": "sticky", "top": "0", "zIndex": "2000", "backgroundColor": "white"}),
     
     # --- MAIN CONTENT ROW ---
     dbc.Row([
@@ -495,7 +495,8 @@ app.layout = dbc.Container([
                 ])
             ], 
             className="mb-4 shadow-sm",
-            style={"position": "sticky", "top": "20px", "zIndex": "1000", "height": "fit-content"})
+            # --- STICKY SIDEBAR ADJUSTED FOR HEADER ---
+            style={"position": "sticky", "top": "220px", "zIndex": "1000", "height": "fit-content"})
         ], width=12, md=3), 
         
         # ----------------------
@@ -541,7 +542,7 @@ app.layout = dbc.Container([
                                 ),
                             ], id='stats-container') 
                         ])
-                    ], className="shadow-sm sticky-top", style={"top": "20px"})
+                    ], className="shadow-sm sticky-top", style={"top": "220px"})
                 ], width=12, md=3)
             ]),
 
