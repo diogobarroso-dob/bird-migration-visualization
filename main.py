@@ -16,9 +16,9 @@ pio.templates.default = "plotly_white"
 # CONSISTENT BIRD COLOR MAPPING
 # ======================================================
 BIRD_COLOR_MAP = {
-    'Eric': '#9370DB',    # Purple
-    'Nico': '#2ECC71',    # Green  
-    'Sanne': '#3498DB'    # Blue
+    'Eric': "#E67E22",    # Purple
+    'Nico': "#27AE60",    # Green  
+    'Sanne': "#8E44AD"    # Blue
 }
 
 # Ensure project path is correct
@@ -447,6 +447,8 @@ def build_animated_map(df, selected_bird):
     )
     return fig_points
 
+
+
 # ======================================================
 # 4. APP LAYOUT
 # ======================================================
@@ -454,9 +456,57 @@ def build_animated_map(df, selected_bird):
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
+# --- INJECT CSS DIRECTLY INTO THE HEADER (Works on old Dash versions) ---
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            /* Make Checkboxes Orange when checked */
+            .form-check-input:checked {
+                background-color: #E67E22 !important;
+                border-color: #E67E22 !important;
+            }
+            /* Optional: Make radio buttons Orange too */
+            .form-check-input[type=radio]:checked {
+                background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%23fff'/%3e%3c/svg%3e");
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
+# --- CUSTOM STYLES ---
+DARK_CARD_STYLE = {
+    "backgroundColor": "#2f4158", # Dark Blue
+    "border": "none",
+    "borderRadius": "10px",
+    "boxShadow": "0 4px 8px rgba(0,0,0,0.3)",
+    "color": "white" # Default text color for the card
+}
+
+WHITE_BUTTON_STYLE = {
+    "backgroundColor": "white",    
+    "color": "#2C3E50",            
+    "border": "none",
+    "fontWeight": "bold"
+}
+
 app.layout = dbc.Container([
     
-    # --- 1. HERO BANNER SECTION (STICKY) ---
+    # --- 1. HERO BANNER SECTION ---
     dbc.Row([
         dbc.Col([
             html.Div([
@@ -468,7 +518,7 @@ app.layout = dbc.Container([
                 html.Div([
                     html.H1("Journeys In The Sky", className="display-3 fw-bold text-white"),
                     html.P("Global Bird Migration Tracker", className="lead text-light"),
-                    html.P("Compare patterns, altitudes, and speeds across 3 seagulls - Eric, Nico and Sanne.", className="text-white-50")
+                    html.P("Compare patterns, altitudes, and speeds across 3 seagulls - Eric, Nico and Sanne.", className="text-white fs-5 fw-bold")
                 ], style={'position': 'relative', 'zIndex': '3', 'paddingTop': '30px', 'textAlign': 'center'})
             ], style={'position': 'relative', 'height': '200px', 'overflow': 'hidden', 'borderRadius': '0 0 15px 15px'})
         ], width=12)
@@ -476,34 +526,31 @@ app.layout = dbc.Container([
     
     # --- MAIN CONTENT ROW ---
     dbc.Row([
-        # ---------------------
-        # LEFT COLUMN (SIDEBAR - BIRDS ONLY)
-        # ---------------------
+        
+        # --- LEFT SIDEBAR (Dark Blue) ---
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader("Global Filter", className="fw-bold"),
+                dbc.CardHeader("Global Filter", className="fw-bold text-white", style={"backgroundColor": "transparent", "borderBottom": "1px solid rgba(255,255,255,0.2)"}),
                 dbc.CardBody([
-                    html.Label("Select Birds", className="mb-2 fw-bold text-primary"),
+                    html.Label("Select Birds", className="mb-2 fw-bold text-white"),
                     dbc.Checklist(
                         id='bird-name-filter',
                         options=[{'label': s, 'value': s} for s in sorted(df['bird_name'].unique())],
-                        value=sorted(df['bird_name'].unique()), 
-                        switch=True, 
-                        className="mb-3"
+                        value=sorted(df['bird_name'].unique()),  
+                        className="mb-3 text-white"
                     ),
-                    dbc.Button("Select All Birds", id="btn-all-birds", color="light", size="sm", className="mt-1 w-100 border"),
+                    dbc.Button("Select All Birds", id="btn-all-birds", size="sm", className="mt-1 w-100 shadow-sm", style=WHITE_BUTTON_STYLE),
                 ])
             ], 
             className="mb-4 shadow-sm",
-            # --- STICKY SIDEBAR ADJUSTED FOR HEADER ---
-            style={"position": "sticky", "top": "220px", "zIndex": "1000", "height": "fit-content"})
+            # Combined Dark Style + Sticky Positioning
+            style={**DARK_CARD_STYLE, "position": "sticky", "top": "220px", "zIndex": "1000", "height": "fit-content"})
         ], width=12, md=3), 
         
-        # ----------------------
-        # RIGHT COLUMN (CHARTS)
-        # ----------------------
+        # --- RIGHT COLUMN (Charts) ---
         dbc.Col([
-            # ROW 1: STATIC MAP
+            
+            # Row 1: Static Map
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -514,42 +561,47 @@ app.layout = dbc.Container([
             
             html.Div(style={"height": "50px"}),
 
-            # ROW 2: BAR CHART (SPLIT COLUMN)
+            # Row 2: Bar Chart + Chart Controls
             dbc.Row([
+                # Bar Chart
                 dbc.Col([
                     dbc.Card([
-                        # --- REDUCED HEIGHT HERE ---
                         dbc.CardBody([dcc.Graph(id='main-bar-chart', style={'height': '50vh'}, config={'responsive': True})], style={'padding': '0'})
                     ], className="shadow-sm border-0 mb-5")
                 ], width=12, md=9),
 
+                # CHART CONTROLS (Dark Blue)
                 dbc.Col([
                     dbc.Card([
-                        dbc.CardHeader("Chart Controls", className="fw-bold"),
+                        dbc.CardHeader("Chart Controls", className="fw-bold text-white", style={"backgroundColor": "transparent", "borderBottom": "1px solid rgba(255,255,255,0.2)"}),
                         dbc.CardBody([
-                            html.Label("Choose Data Category", className="fw-bold text-primary"),
+                            html.Label("Choose Data Category", className="fw-bold text-white"),
                             dbc.RadioItems(
                                 id='category-selector',
                                 options=[{'label': ' Altitude', 'value': 'Altitude'}, {'label': ' Speed', 'value': 'Speed'}, {'label': ' Rest Stops', 'value': 'Rest'}],
-                                value='Altitude', className="mb-3", inputClassName="me-2"
+                                value='Altitude', 
+                                className="mb-3 text-white", 
+                                inputClassName="me-2"
                             ),
-                            html.Hr(),
+                            html.Hr(style={'borderColor': 'rgba(255,255,255,0.2)'}),
                             html.Div([
-                                html.Label("Select Statistics", className="fw-bold text-primary"),
+                                html.Label("Select Statistics", className="fw-bold text-white"),
                                 dbc.Checklist(
                                     id='statistic-checklist',
                                     options=[{'label': ' Maximum', 'value': 'Max'}, {'label': ' Average', 'value': 'Avg'}, {'label': ' Minimum', 'value': 'Min'}],
-                                    value=['Max', 'Avg', 'Min'], switch=True, className="mb-3"
+                                    value=['Max', 'Avg', 'Min'],  
+                                    className="mb-3 text-white"
                                 ),
                             ], id='stats-container') 
                         ])
-                    ], className="shadow-sm sticky-top", style={"top": "220px"})
+                    ], className="shadow-sm sticky-top", 
+                       style={**DARK_CARD_STYLE, "top": "220px"}) # Applied Dark Style here too
                 ], width=12, md=3)
             ]),
 
             html.Div(style={"height": "200px"}),
 
-            # ROW 3: ANIMATED MAP + LINE CHARTS
+            # Row 3: Animated Map + Line Charts
             dbc.Row([
                 dbc.Col([
                     dbc.Card([
@@ -569,7 +621,7 @@ app.layout = dbc.Container([
             ])
         ], width=12, md=9), 
     ]), 
-], fluid=True)
+], fluid=True, style={'backgroundColor': "#EAF4F9", 'minHeight': '100vh'})
 
 # ======================================================
 # 5. CALLBACKS
