@@ -16,9 +16,9 @@ pio.templates.default = "plotly_white"
 # CONSISTENT BIRD COLOR MAPPING
 # ======================================================
 BIRD_COLOR_MAP = {
-    'Eric': "#E67E22",    # Purple
-    'Nico': "#27AE60",    # Green  
-    'Sanne': "#8E44AD"    # Blue
+    'Eric': "#E74C3C",    
+    'Nico': "#2ECC71",  
+    'Sanne': "#9B59B6"
 }
 
 # Ensure project path is correct
